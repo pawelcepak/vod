@@ -7,3 +7,4 @@ vod-release.jks
 vod-keystore-base64.txt
 *.jks
 *.keystore
+.last_test_branch

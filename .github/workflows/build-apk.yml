@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - "test/**"
   workflow_dispatch:
 
 jobs:
@@ -55,11 +56,11 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p output
-          cp app/build/outputs/apk/release/app-release.apk output/VOD-USB-0.4.1.apk
+          cp app/build/outputs/apk/release/app-release.apk output/VOD-USB-0.4.2.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: VOD-USB-APK
-          path: output/VOD-USB-0.4.1.apk
+          name: VOD-USB-APK-${{ github.run_number }}
+          path: output/VOD-USB-0.4.2.apk
           if-no-files-found: error
