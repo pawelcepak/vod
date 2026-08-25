@@ -1782,6 +1782,7 @@ class MainActivity : AppCompatActivity() {
 
         private const val KEY_SERIES_URL = "series_url"
         private const val KEY_CATALOG_JSON = "catalog_json"
+        private const val KEY_START_EPISODE = "start_episode"
         private const val DEFAULT_SERIES_URL = "https://vod.tvp.pl/seriale,18/m-jak-milosc-odcinki,274703"
         private const val TVP_API_BASE = "https://vod.tvp.pl/api/products"
 
