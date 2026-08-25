@@ -11,8 +11,8 @@ android {
         applicationId = "pl.szynolandia.mjakmiloscusb"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.4.2"
+        versionCode = 9
+        versionName = "0.5.0"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -69,7 +69,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-service:2.9.0")
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("com.google.android.material:material:1.12.0")
-    implementation("io.coil-kt:coil:2.7.0")
 
     val youtubedlAndroid = "0.18.1"
     implementation("io.github.junkfood02.youtubedl-android:library:$youtubedlAndroid")

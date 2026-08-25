@@ -12,10 +12,10 @@ import android.os.Bundle
 import android.os.StatFs
 import android.provider.DocumentsContract
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -26,7 +26,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
-import coil.load
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDL.UpdateChannel
@@ -65,6 +64,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var catalogStatusText: TextView
     private lateinit var seriesUrlEdit: EditText
     private lateinit var refreshCatalogButton: Button
+    private lateinit var startEpisodeEdit: EditText
+    private lateinit var advancedContainer: LinearLayout
+    private var visibleEpisodeLimit: Int = 10
 
     private val prefs by lazy {
         getSharedPreferences(
@@ -346,6 +348,8 @@ class MainActivity : AppCompatActivity() {
         catalogStatusText = findViewById(R.id.catalogStatusText)
         seriesUrlEdit = findViewById(R.id.seriesUrlEdit)
         refreshCatalogButton = findViewById(R.id.refreshCatalogButton)
+        startEpisodeEdit = findViewById(R.id.startEpisodeEdit)
+        advancedContainer = findViewById(R.id.advancedContainer)
     }
 
     private fun bindButtons() {
@@ -376,6 +380,27 @@ class MainActivity : AppCompatActivity() {
             R.id.editLinksButton
         ).setOnClickListener {
             showLinksEditor()
+        }
+
+        findViewById<Button>(R.id.showEpisodesButton).setOnClickListener {
+            val number = startEpisodeEdit.text.toString().trim().toIntOrNull()
+            if (number == null) {
+                Toast.makeText(this, "Wpisz numer odcinka.", Toast.LENGTH_SHORT).show()
+            } else {
+                prefs.edit().putInt(KEY_START_EPISODE, number).apply()
+                visibleEpisodeLimit = 10
+                rebuildEpisodesUi()
+            }
+        }
+
+        findViewById<Button>(R.id.showMoreEpisodesButton).setOnClickListener {
+            visibleEpisodeLimit += 10
+            rebuildEpisodesUi()
+        }
+
+        findViewById<Button>(R.id.advancedButton).setOnClickListener {
+            advancedContainer.visibility =
+                if (advancedContainer.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
 
         downloadButton
@@ -620,22 +645,146 @@ class MainActivity : AppCompatActivity() {
     private fun rebuildEpisodesUi() {
         episodesContainer.removeAllViews()
         selectedEpisodeNumbers.clear()
-        for (episode in episodes.sortedByDescending { it.number }) {
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 8, 0, 8) }
-            val image = ImageView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(112), dp(64)); scaleType = ImageView.ScaleType.CENTER_CROP
-                if (episode.thumbnailUrl.isNotBlank()) load(episode.thumbnailUrl) { crossfade(true) }
-            }
-            val alreadyDownloaded = episode.number in downloadedEpisodeNumbers
-            val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f); setPadding(dp(10),0,0,0) }
-            val check = CheckBox(this).apply {
-                text = "Odcinek ${episode.number}"; textSize = 17f; isEnabled = !alreadyDownloaded && episode.url.isNotBlank()
-                setOnCheckedChangeListener { _, checked -> if (checked) selectedEpisodeNumbers.add(episode.number) else selectedEpisodeNumbers.remove(episode.number); updateEpisodeSelectionSummary() }
-            }
-            val subtitle = TextView(this).apply { text = episode.title.ifBlank { "Odcinek ${episode.number}" }; textSize = 13f; maxLines = 2 }
-            val status = TextView(this).apply { textSize = 13f; text = when { alreadyDownloaded -> "Pobrany ✓"; episode.url.isBlank() -> "Brak linku"; else -> "Do pobrania" } }
-            column.addView(check); column.addView(subtitle); column.addView(status); row.addView(image); row.addView(column); episodesContainer.addView(row)
+
+        val root = currentUsbRoot()
+        val usbReady =
+            root != null &&
+                root.exists() &&
+                root.canRead()
+
+        if (!usbReady) {
+            findViewById<TextView>(R.id.episodesHintText).text =
+                "Najpierw podłącz i wybierz pendrive."
+
+            findViewById<Button>(R.id.showMoreEpisodesButton).visibility =
+                View.GONE
+
+            updateEpisodeSelectionSummary()
+            return
         }
+
+        if (episodes.isEmpty()) {
+            val empty = TextView(this).apply {
+                text = "Pobieranie listy odcinków..."
+                textSize = 16f
+                setPadding(4, 12, 4, 12)
+            }
+
+            episodesContainer.addView(empty)
+
+            findViewById<Button>(R.id.showMoreEpisodesButton).visibility =
+                View.GONE
+
+            updateEpisodeSelectionSummary()
+            return
+        }
+
+        val manualStart =
+            prefs.getInt(
+                KEY_START_EPISODE,
+                -1
+            )
+
+        val automaticStart =
+            if (downloadedEpisodeNumbers.isNotEmpty()) {
+                (downloadedEpisodeNumbers.maxOrNull() ?: 0) + 1
+            } else {
+                episodes.minOfOrNull {
+                    it.number
+                } ?: 1
+            }
+
+        val requestedStart =
+            if (manualStart > 0) {
+                manualStart
+            } else {
+                automaticStart
+            }
+
+        findViewById<TextView>(R.id.episodesHintText).text =
+            if (manualStart > 0) {
+                "Pokazuję odcinki od $requestedStart (ustawione ręcznie)."
+            } else {
+                "Następny odcinek do pobrania: $requestedStart"
+            }
+
+        val allAvailable =
+            episodes
+                .filter {
+                    it.number >= requestedStart
+                }
+                .sortedBy {
+                    it.number
+                }
+
+        val visibleEpisodes =
+            allAvailable.take(
+                visibleEpisodeLimit
+            )
+
+        if (visibleEpisodes.isEmpty()) {
+            val empty = TextView(this).apply {
+                text = "Brak kolejnych odcinków do pokazania."
+                textSize = 16f
+                setPadding(4, 12, 4, 12)
+            }
+
+            episodesContainer.addView(empty)
+        } else {
+            for (episode in visibleEpisodes) {
+                val alreadyDownloaded =
+                    episode.number in downloadedEpisodeNumbers
+
+                val check =
+                    CheckBox(this).apply {
+                        text =
+                            if (alreadyDownloaded) {
+                                "Odcinek ${episode.number}   •   na pendrive ✓"
+                            } else {
+                                "Odcinek ${episode.number}"
+                            }
+
+                        textSize = 18f
+                        minHeight = dp(52)
+
+                        isEnabled =
+                            !alreadyDownloaded &&
+                                episode.url.isNotBlank()
+
+                        setOnCheckedChangeListener {
+                                _,
+                                checked ->
+
+                            if (checked) {
+                                selectedEpisodeNumbers.add(
+                                    episode.number
+                                )
+                            } else {
+                                selectedEpisodeNumbers.remove(
+                                    episode.number
+                                )
+                            }
+
+                            updateEpisodeSelectionSummary()
+                        }
+                    }
+
+                episodesContainer.addView(
+                    check
+                )
+            }
+        }
+
+        findViewById<Button>(R.id.showMoreEpisodesButton).visibility =
+            if (
+                allAvailable.size >
+                visibleEpisodes.size
+            ) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
         updateEpisodeSelectionSummary()
     }
 
@@ -653,9 +802,9 @@ class MainActivity : AppCompatActivity() {
 
         downloadSelectionText.text =
             if (count == 0) {
-                "Zaznaczono: 0 odcinków"
+                "Zaznacz odcinki poniżej."
             } else {
-                "Zaznaczono: $count • orientacyjnie " +
+                "Wybrano: $count odc. • około " +
                     formatBytes(
                         estimateBytes
                     )
@@ -812,10 +961,10 @@ class MainActivity : AppCompatActivity() {
             uri == null
         ) {
             usbStatusText.text =
-                "Pendrive: nie wybrano"
+                "Pendrive nie jest jeszcze wybrany"
 
-            spaceText.text =
-                "Wolne miejsce: —"
+            spaceText.visibility =
+                View.GONE
 
             downloadedSummaryText.text =
                 "Na pendrive: 0 odcinków"
@@ -839,10 +988,10 @@ class MainActivity : AppCompatActivity() {
             !root.canRead()
         ) {
             usbStatusText.text =
-                "Pendrive: niedostępny — podłącz USB i kliknij Odśwież"
+                "Pendrive odłączony — podłącz go i naciśnij Odśwież"
 
-            spaceText.text =
-                "Wolne miejsce: —"
+            spaceText.visibility =
+                View.GONE
 
             downloadedSummaryText.text =
                 "Na pendrive: 0 odcinków"
@@ -855,25 +1004,29 @@ class MainActivity : AppCompatActivity() {
         }
 
         usbStatusText.text =
-            "Pendrive: gotowy • ${root.name ?: "USB"}"
+            "Pendrive podłączony ✓  ${root.name ?: "USB"}"
 
         val space =
             getStorageSpace(
                 uri
             )
 
-        spaceText.text =
-            if (
-                space != null
-            ) {
+        if (
+            space != null
+        ) {
+            spaceText.visibility =
+                View.VISIBLE
+
+            spaceText.text =
                 "Wolne miejsce: " +
                     "${formatBytes(space.first)} z " +
                     formatBytes(
                         space.second
                     )
-            } else {
-                "Wolne miejsce: Android nie udostępnił danych"
-            }
+        } else {
+            spaceText.visibility =
+                View.GONE
+        }
 
         val videos =
             root.listFiles()
@@ -921,6 +1074,19 @@ class MainActivity : AppCompatActivity() {
                 )
         }
 
+        if (
+            downloadedEpisodeNumbers.isNotEmpty()
+        ) {
+            prefs.edit()
+                .remove(
+                    KEY_START_EPISODE
+                )
+                .apply()
+
+            visibleEpisodeLimit =
+                10
+        }
+
         val totalBytes =
             videos.sumOf {
                 it.length()
@@ -938,7 +1104,7 @@ class MainActivity : AppCompatActivity() {
             val empty =
                 TextView(this).apply {
                     text =
-                        "Brak filmów w wybranym folderze."
+                        "Pendrive jest pusty — nie ma jeszcze pobranych odcinków."
 
                     textSize =
                         16f
@@ -1049,6 +1215,11 @@ class MainActivity : AppCompatActivity() {
                                     .toString()
                             )
                     }
+
+                    deleteButton.isEnabled =
+                        selectedDownloadedUris
+                            .isNotEmpty() &&
+                            !isQueueActive()
                 }
             }
 
@@ -1287,6 +1458,9 @@ class MainActivity : AppCompatActivity() {
                 queue.isNotEmpty() ->
                     "Kolejka oczekuje: ${queue.size} odc."
 
+                status == "Gotowe" ->
+                    "Gotowe ✓ Odcinki są na pendrive. Możesz go odłączyć i podłączyć do telewizora."
+
                 else ->
                     "Brak aktywnego pobierania"
             }
@@ -1301,6 +1475,7 @@ class MainActivity : AppCompatActivity() {
             }
 
         updateButtonsFromPersistedState()
+        updateDownloadProgressVisibility()
     }
 
     private fun loadPersistedQueue():
@@ -1384,7 +1559,7 @@ class MainActivity : AppCompatActivity() {
             loadPersistedQueue()
 
         val active =
-            queue.isNotEmpty()
+            isQueueActive()
 
         downloadButton.isEnabled =
             engineReady &&
@@ -1400,6 +1575,37 @@ class MainActivity : AppCompatActivity() {
             !active &&
                 downloadedEpisodeNumbers
                     .isNotEmpty()
+
+        updateDownloadProgressVisibility()
+    }
+
+    private fun updateDownloadProgressVisibility() {
+        val active =
+            isQueueActive()
+
+        val visibility =
+            if (active) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+        stopButton.visibility =
+            visibility
+
+        currentDownloadText.visibility =
+            visibility
+
+        currentProgressBar.visibility =
+            visibility
+
+        queueProgressText.visibility =
+            visibility
+
+        findViewById<TextView>(
+            R.id.downloadProgressTitle
+        ).visibility =
+            visibility
     }
 
     private fun currentUsbRoot():
@@ -1487,11 +1693,10 @@ class MainActivity : AppCompatActivity() {
 
         AlertDialog.Builder(this)
             .setTitle(
-                "Usunąć odcinki?"
+                "Usunąć obejrzane odcinki?"
             )
             .setMessage(
-                "Wybrane pliki (${selectedDownloadedUris.size}) " +
-                    "zostaną usunięte z pendrive."
+                "Zaznaczone odcinki (${selectedDownloadedUris.size}) zostaną trwale usunięte z pendrive."
             )
             .setNegativeButton(
                 "Anuluj",
@@ -1548,7 +1753,7 @@ class MainActivity : AppCompatActivity() {
 
         Toast.makeText(
             this,
-            "Usunięto: $deleted • błędy: $errors",
+            if (errors == 0) "Usunięto $deleted odc." else "Usunięto: $deleted • błędy: $errors",
             Toast.LENGTH_LONG
         ).show()
 
@@ -1711,6 +1916,7 @@ class MainActivity : AppCompatActivity() {
 
         private const val KEY_SERIES_URL = "series_url"
         private const val KEY_CATALOG_JSON = "catalog_json"
+        private const val KEY_START_EPISODE = "start_episode"
         private const val DEFAULT_SERIES_URL = "https://vod.tvp.pl/seriale,18/m-jak-milosc-odcinki,274703"
         private const val TVP_API_BASE = "https://vod.tvp.pl/api/products"
 
