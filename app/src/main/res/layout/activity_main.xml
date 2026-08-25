@@ -185,7 +185,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
             android:paddingBottom="20dp"
-            android:text="Wersja 0.2.1: TVP preferuje zwykłą ścieżkę Polski zamiast Audiodeskrypcji. każdy odcinek jest pobierany i scalany tymczasowo na telefonie, następnie kopiowany na USB i usuwany z pamięci roboczej telefonu."
+            android:text="Wersja 0.3.0: pobieranie działa jako usługa w tle z powiadomieniem. Kolejka jest zapisywana i może przetrwać zamknięcie ekranu aplikacji. TVP używa zwykłej ścieżki Polski zamiast audiodeskrypcji."
             android:textSize="13sp" />
 
     </LinearLayout>
