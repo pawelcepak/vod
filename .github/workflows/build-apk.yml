@@ -25,23 +25,41 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Cache Android debug keystore
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: vod-android-debug-keystore-v1
+      - name: Validate signing secrets
+        env:
+          VOD_KEYSTORE_BASE64: ${{ secrets.VOD_KEYSTORE_BASE64 }}
+          VOD_KEYSTORE_PASSWORD: ${{ secrets.VOD_KEYSTORE_PASSWORD }}
+          VOD_KEY_ALIAS: ${{ secrets.VOD_KEY_ALIAS }}
+          VOD_KEY_PASSWORD: ${{ secrets.VOD_KEY_PASSWORD }}
+        run: |
+          test -n "$VOD_KEYSTORE_BASE64" || (echo "Missing VOD_KEYSTORE_BASE64" && exit 1)
+          test -n "$VOD_KEYSTORE_PASSWORD" || (echo "Missing VOD_KEYSTORE_PASSWORD" && exit 1)
+          test -n "$VOD_KEY_ALIAS" || (echo "Missing VOD_KEY_ALIAS" && exit 1)
+          test -n "$VOD_KEY_PASSWORD" || (echo "Missing VOD_KEY_PASSWORD" && exit 1)
 
-      - name: Build debug APK
-        run: gradle :app:assembleDebug
+      - name: Restore release keystore
+        env:
+          VOD_KEYSTORE_BASE64: ${{ secrets.VOD_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/vod-signing"
+          printf '%s' "$VOD_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/vod-signing/vod-release.jks"
+
+      - name: Build signed release APK
+        env:
+          VOD_KEYSTORE_PATH: ${{ runner.temp }}/vod-signing/vod-release.jks
+          VOD_KEYSTORE_PASSWORD: ${{ secrets.VOD_KEYSTORE_PASSWORD }}
+          VOD_KEY_ALIAS: ${{ secrets.VOD_KEY_ALIAS }}
+          VOD_KEY_PASSWORD: ${{ secrets.VOD_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease
 
       - name: Rename APK
         run: |
           mkdir -p output
-          cp app/build/outputs/apk/debug/app-debug.apk output/VOD-USB-0.3.0-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk output/VOD-USB-0.3.1.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MJakMiloscUSB-APK
-          path: output/VOD-USB-0.3.0-debug.apk
+          name: VOD-USB-APK
+          path: output/VOD-USB-0.3.1.apk
           if-no-files-found: error

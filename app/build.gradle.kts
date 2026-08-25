@@ -11,11 +11,39 @@ android {
         applicationId = "pl.szynolandia.mjakmiloscusb"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.3.0"
+        versionCode = 5
+        versionName = "0.3.1"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            val storePath = System.getenv("VOD_KEYSTORE_PATH")
+            val storePasswordEnv = System.getenv("VOD_KEYSTORE_PASSWORD")
+            val keyAliasEnv = System.getenv("VOD_KEY_ALIAS")
+            val keyPasswordEnv = System.getenv("VOD_KEY_PASSWORD")
+
+            if (
+                !storePath.isNullOrBlank() &&
+                !storePasswordEnv.isNullOrBlank() &&
+                !keyAliasEnv.isNullOrBlank() &&
+                !keyPasswordEnv.isNullOrBlank()
+            ) {
+                storeFile = file(storePath)
+                storePassword = storePasswordEnv
+                keyAlias = keyAliasEnv
+                keyPassword = keyPasswordEnv
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

@@ -3,3 +3,7 @@
 local.properties
 **/build/
 *.iml
+vod-release.jks
+vod-keystore-base64.txt
+*.jks
+*.keystore
