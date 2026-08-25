@@ -224,7 +224,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
             android:paddingBottom="20dp"
-            android:text="Wersja 0.4.0: automatyczny katalog TVP z głównego adresu serialu, miniaturami i automatycznymi linkami odcinków. Pobieranie działa w tle i zapisuje pliki na USB."
+            android:text="Wersja 0.4.1: projekt można rozwijać również z telefonu przez Termux + GitHub. Kompilację APK nadal wykonuje GitHub Actions."
             android:textSize="13sp" />
 
     </LinearLayout>
