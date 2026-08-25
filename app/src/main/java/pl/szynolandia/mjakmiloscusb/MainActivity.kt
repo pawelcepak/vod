@@ -677,7 +677,11 @@ class MainActivity : AppCompatActivity() {
 
                 addOption(
                     "-f",
-                    "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+                    if (isTvpUrl(episode.url)) {
+                        "bestvideo+audio0-Polski/bestvideo+bestaudio/best"
+                    } else {
+                        "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+                    }
                 )
 
                 addOption(
@@ -777,6 +781,15 @@ class MainActivity : AppCompatActivity() {
             false
         } finally {
             currentProcessId = null
+        }
+    }
+
+    private fun isTvpUrl(url: String): Boolean {
+        return try {
+            val host = Uri.parse(url).host?.lowercase(Locale.ROOT).orEmpty()
+            host == "tvp.pl" || host.endsWith(".tvp.pl")
+        } catch (_: Exception) {
+            false
         }
     }
 
