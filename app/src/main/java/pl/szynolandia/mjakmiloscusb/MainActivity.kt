@@ -13,14 +13,11 @@ import android.os.StatFs
 import android.provider.DocumentsContract
 import android.view.Gravity
 import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -46,14 +43,8 @@ class MainActivity : AppCompatActivity() {
     data class Episode(
         val number: Int,
         var url: String,
-        var title: String = ""
-    )
-
-    data class SeriesOption(
-        val key: String,
-        val title: String,
-        val url: String,
-        val filePrefix: String
+        var title: String = "",
+        var thumbnailUrl: String = ""
     )
 
     private lateinit var titleText: TextView
@@ -75,8 +66,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var refreshCatalogButton: Button
     private lateinit var startEpisodeEdit: EditText
     private lateinit var advancedContainer: LinearLayout
-    private lateinit var seriesSpinner: Spinner
-    private var suppressSeriesSelection = false
     private var visibleEpisodeLimit: Int = 10
 
     private val prefs by lazy {
@@ -232,7 +221,6 @@ class MainActivity : AppCompatActivity() {
 
         bindViews()
         bindButtons()
-        setupSeriesSelector()
 
         treeUri =
             prefs.getString(
@@ -247,7 +235,7 @@ class MainActivity : AppCompatActivity() {
 
         loadCatalogCacheOrAssets()
         seriesUrlEdit.setText(
-            currentSeries().url
+            prefs.getString(KEY_SERIES_URL, DEFAULT_SERIES_URL) ?: DEFAULT_SERIES_URL
         )
         refreshUsb()
         initDownloader()
@@ -362,7 +350,6 @@ class MainActivity : AppCompatActivity() {
         refreshCatalogButton = findViewById(R.id.refreshCatalogButton)
         startEpisodeEdit = findViewById(R.id.startEpisodeEdit)
         advancedContainer = findViewById(R.id.advancedContainer)
-        seriesSpinner = findViewById(R.id.seriesSpinner)
     }
 
     private fun bindButtons() {
@@ -400,7 +387,7 @@ class MainActivity : AppCompatActivity() {
             if (number == null) {
                 Toast.makeText(this, "Wpisz numer odcinka.", Toast.LENGTH_SHORT).show()
             } else {
-                prefs.edit().putInt(selectedStartKey(), number).apply()
+                prefs.edit().putInt(KEY_START_EPISODE, number).apply()
                 visibleEpisodeLimit = 10
                 rebuildEpisodesUi()
             }
@@ -443,171 +430,6 @@ class MainActivity : AppCompatActivity() {
             notificationPermissionLauncher.launch(
                 Manifest.permission.POST_NOTIFICATIONS
             )
-        }
-    }
-
-    private fun setupSeriesSelector() {
-        val adapter =
-            ArrayAdapter(
-                this,
-                android.R.layout.simple_spinner_item,
-                SERIES_OPTIONS.map { it.title }
-            ).apply {
-                setDropDownViewResource(
-                    android.R.layout.simple_spinner_dropdown_item
-                )
-            }
-
-        seriesSpinner.adapter =
-            adapter
-
-        val savedKey =
-            prefs.getString(
-                KEY_SELECTED_SERIES,
-                SERIES_OPTIONS.first().key
-            ) ?: SERIES_OPTIONS.first().key
-
-        val selectedIndex =
-            SERIES_OPTIONS.indexOfFirst {
-                it.key == savedKey
-            }.let {
-                if (it >= 0) it else 0
-            }
-
-        suppressSeriesSelection =
-            true
-
-        seriesSpinner.setSelection(
-            selectedIndex,
-            false
-        )
-
-        suppressSeriesSelection =
-            false
-
-        seriesSpinner.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-
-                override fun onItemSelected(
-                    parent: AdapterView<*>?,
-                    view: View?,
-                    position: Int,
-                    id: Long
-                ) {
-                    if (
-                        suppressSeriesSelection
-                    ) {
-                        return
-                    }
-
-                    val selected =
-                        SERIES_OPTIONS[
-                            position.coerceIn(
-                                0,
-                                SERIES_OPTIONS.lastIndex
-                            )
-                        ]
-
-                    val previous =
-                        prefs.getString(
-                            KEY_SELECTED_SERIES,
-                            SERIES_OPTIONS.first().key
-                        )
-
-                    if (
-                        previous == selected.key
-                    ) {
-                        return
-                    }
-
-                    prefs.edit()
-                        .putString(
-                            KEY_SELECTED_SERIES,
-                            selected.key
-                        )
-                        .remove(
-                            selectedStartKey(
-                                selected.key
-                            )
-                        )
-                        .apply()
-
-                    visibleEpisodeLimit =
-                        10
-
-                    episodes.clear()
-                    selectedEpisodeNumbers.clear()
-
-                    seriesUrlEdit.setText(
-                        selected.url
-                    )
-
-                    loadCatalogCacheOrAssets()
-                    refreshUsb()
-                    refreshCatalogFromTvp(
-                        false
-                    )
-                }
-
-                override fun onNothingSelected(
-                    parent: AdapterView<*>?
-                ) = Unit
-            }
-    }
-
-    private fun currentSeries(): SeriesOption {
-        val key =
-            prefs.getString(
-                KEY_SELECTED_SERIES,
-                SERIES_OPTIONS.first().key
-            ) ?: SERIES_OPTIONS.first().key
-
-        return SERIES_OPTIONS.firstOrNull {
-            it.key == key
-        } ?: SERIES_OPTIONS.first()
-    }
-
-    private fun catalogKey(
-        seriesKey: String = currentSeries().key
-    ): String =
-        "${KEY_CATALOG_JSON}_$seriesKey"
-
-    private fun selectedStartKey(
-        seriesKey: String = currentSeries().key
-    ): String =
-        "${KEY_START_EPISODE}_$seriesKey"
-
-    private fun fileBelongsToCurrentSeries(
-        fileName: String
-    ): Boolean {
-        val normalized =
-            fileName.lowercase(
-                Locale.ROOT
-            )
-
-        return when (
-            currentSeries().key
-        ) {
-            "mjak" ->
-                !normalized.startsWith(
-                    "klan - "
-                ) &&
-                    !normalized.startsWith(
-                        "na dobre i na zle - "
-                    )
-
-            "klan" ->
-                normalized.startsWith(
-                    "klan - "
-                )
-
-            "nadobre" ->
-                normalized.startsWith(
-                    "na dobre i na zle - "
-                )
-
-            else ->
-                false
         }
     }
 
@@ -692,7 +514,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadCatalogCacheOrAssets() {
         episodes.clear()
-        val cached = prefs.getString(catalogKey(), null)
+        val cached = prefs.getString(KEY_CATALOG_JSON, null)
         if (!cached.isNullOrBlank()) {
             try {
                 val root = JSONObject(cached)
@@ -701,7 +523,7 @@ class MainActivity : AppCompatActivity() {
                 for (i in 0 until array.length()) {
                     val item = array.getJSONObject(i)
                     val number = item.optInt("number", -1)
-                    if (number > 0) episodes += Episode(number, item.optString("url", "")), item.optString("thumbnail", ""))
+                    if (number > 0) episodes += Episode(number, item.optString("url", ""), item.optString("title", ""), item.optString("thumbnail", ""))
                 }
                 if (episodes.isNotEmpty()) {
                     rebuildEpisodesUi()
@@ -712,13 +534,13 @@ class MainActivity : AppCompatActivity() {
         }
         val raw = assets.open("episodes.json").bufferedReader().use { it.readText() }
         val json = JSONObject(raw)
-        titleText.text = currentSeries().title
+        titleText.text = json.optString("series", "VOD")
         val array = json.getJSONArray("episodes")
         for (i in 0 until array.length()) {
             val item = array.getJSONObject(i)
             val number = item.getInt("number")
             val savedUrl = prefs.getString("episode_url_$number", null)
-            episodes += Episode(number, savedUrl ?: item.optString("url", ""))
+            episodes += Episode(number, savedUrl ?: item.optString("url", ""), "Odcinek $number", "")
         }
         rebuildEpisodesUi()
     }
@@ -734,7 +556,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshCatalogFromTvp(showToast: Boolean) {
-        val seriesUrl = seriesUrlEdit.text.toString().trim().ifBlank { currentSeries().url }
+        val seriesUrl = seriesUrlEdit.text.toString().trim().ifBlank { DEFAULT_SERIES_URL }
         val seriesId = parseSeriesId(seriesUrl) ?: return
         catalogStatusText.text = "Katalog TVP: aktualizowanie..."
         refreshCatalogButton.isEnabled = false
@@ -752,7 +574,7 @@ class MainActivity : AppCompatActivity() {
                         val number = item.optInt("number", -1)
                         val webUrl = item.optString("webUrl", "")
                         if (number <= 0 || webUrl.isBlank()) continue
-                        found[number] = Episode(number, webUrl, item.optString("title"))
+                        found[number] = Episode(number, webUrl, item.optString("title", "Odcinek $number"), findFirstImageUrl(item.opt("images")))
                     }
                 }
                 val sorted = found.values.sortedByDescending { it.number }
@@ -761,7 +583,7 @@ class MainActivity : AppCompatActivity() {
                 saveCatalog(seriesTitle, sorted)
                 withContext(Dispatchers.Main) {
                     episodes.clear(); episodes.addAll(sorted); titleText.text = seriesTitle
-                    prefs.edit().putString("${KEY_SERIES_URL}_${currentSeries().key}", seriesUrl).apply()
+                    prefs.edit().putString(KEY_SERIES_URL, seriesUrl).apply()
                     refreshUsb()
                     catalogStatusText.text = "Katalog TVP: ${sorted.size} odc. • zaktualizowano"
                     refreshCatalogButton.isEnabled = true
@@ -815,9 +637,9 @@ class MainActivity : AppCompatActivity() {
     private fun saveCatalog(seriesTitle: String, list: List<Episode>) {
         val root = JSONObject().put("series", seriesTitle)
         val array = JSONArray()
-        list.forEach { e -> array.put(JSONObject().put("number", e.number).put("url", e.url).put("title", e.title)) }
+        list.forEach { e -> array.put(JSONObject().put("number", e.number).put("url", e.url).put("title", e.title).put("thumbnail", e.thumbnailUrl)) }
         root.put("episodes", array)
-        prefs.edit().putString(catalogKey(), root.toString()).apply()
+        prefs.edit().putString(KEY_CATALOG_JSON, root.toString()).apply()
     }
 
     private fun rebuildEpisodesUi() {
@@ -1211,7 +1033,6 @@ class MainActivity : AppCompatActivity() {
                 .filter { file ->
 
                     file.isFile &&
-                        fileBelongsToCurrentSeries(file.name ?: "") &&
                         file.name
                             ?.lowercase(
                                 Locale.ROOT
@@ -1258,7 +1079,7 @@ class MainActivity : AppCompatActivity() {
         ) {
             prefs.edit()
                 .remove(
-                    selectedStartKey()
+                    KEY_START_EPISODE
                 )
                 .apply()
 
@@ -1576,14 +1397,6 @@ class MainActivity : AppCompatActivity() {
                     .put(
                         "url",
                         episode.url
-                    )
-                    .put(
-                        "seriesKey",
-                        currentSeries().key
-                    )
-                    .put(
-                        "filePrefix",
-                        currentSeries().filePrefix
                     )
             )
         }
@@ -2102,30 +1915,9 @@ class MainActivity : AppCompatActivity() {
     companion object {
 
         private const val KEY_SERIES_URL = "series_url"
-        private const val KEY_SELECTED_SERIES = "selected_series"
         private const val KEY_CATALOG_JSON = "catalog_json"
         private const val KEY_START_EPISODE = "start_episode"
-        private val SERIES_OPTIONS =
-            listOf(
-                SeriesOption(
-                    key = "mjak",
-                    title = "M jak miłość",
-                    url = "https://vod.tvp.pl/seriale,18/m-jak-milosc-odcinki,274703",
-                    filePrefix = ""
-                ),
-                SeriesOption(
-                    key = "klan",
-                    title = "Klan",
-                    url = "https://vod.tvp.pl/seriale,18/klan-odcinki,273586",
-                    filePrefix = "Klan - "
-                ),
-                SeriesOption(
-                    key = "nadobre",
-                    title = "Na dobre i na złe",
-                    url = "https://vod.tvp.pl/seriale,18/na-dobre-i-na-zle-odcinki,273721",
-                    filePrefix = "Na dobre i na zle - "
-                )
-            )
+        private const val DEFAULT_SERIES_URL = "https://vod.tvp.pl/seriale,18/m-jak-milosc-odcinki,274703"
         private const val TVP_API_BASE = "https://vod.tvp.pl/api/products"
 
         private const val ESTIMATED_EPISODE_BYTES =

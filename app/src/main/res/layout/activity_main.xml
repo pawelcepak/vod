@@ -19,19 +19,6 @@
             android:textStyle="bold" />
 
         <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="Serial"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <Spinner
-            android:id="@+id/seriesSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="56dp" />
-
-        <TextView
             android:id="@+id/usbStatusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

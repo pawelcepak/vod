@@ -28,9 +28,7 @@ class DownloadService : Service() {
 
     data class QueueItem(
         val number: Int,
-        val url: String,
-        val seriesKey: String = "mjak",
-        val filePrefix: String = ""
+        val url: String
     )
 
     private val serviceScope =
@@ -43,8 +41,6 @@ class DownloadService : Service() {
 
     @Volatile
     private var currentProcessId: String? = null
-    @Volatile
-    private var currentFilePrefix: String = ""
 
     private val prefs by lazy {
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
@@ -252,7 +248,7 @@ class DownloadService : Service() {
         cleanWorkDir()
 
         val baseName =
-            "${item.filePrefix}odc. ${item.number}"
+            "odc. ${item.number}"
 
         val processId =
             "vod-bg-${item.number}-${System.currentTimeMillis()}"
@@ -353,9 +349,6 @@ class DownloadService : Service() {
                 true
             )
 
-            currentFilePrefix =
-                "${item.filePrefix}odc. "
-
             val copied =
                 copyFileToUsb(
                     source = output,
@@ -403,7 +396,7 @@ class DownloadService : Service() {
                 .lowercase(Locale.ROOT)
 
         val finalName =
-            "${currentFilePrefix}$episodeNumber.$extension"
+            "odc. $episodeNumber.$extension"
 
         root.findFile(finalName)
             ?.delete()
@@ -621,16 +614,8 @@ class DownloadService : Service() {
                     ) {
                         add(
                             QueueItem(
-                                number = number,
-                                url = url,
-                                seriesKey = obj.optString(
-                                    "seriesKey",
-                                    "mjak"
-                                ),
-                                filePrefix = obj.optString(
-                                    "filePrefix",
-                                    ""
-                                )
+                                number,
+                                url
                             )
                         )
                     }
@@ -657,13 +642,6 @@ class DownloadService : Service() {
                     .put(
                         "url",
                         item.url
-                    )                    .put(
-                        "seriesKey",
-                        item.seriesKey
-                    )
-                    .put(
-                        "filePrefix",
-                        item.filePrefix
                     )
             )
         }
