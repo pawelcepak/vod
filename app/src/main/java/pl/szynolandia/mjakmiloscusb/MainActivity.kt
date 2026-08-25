@@ -552,8 +552,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
             val alreadyDownloaded =
-                episode.number
-                    in downloadedEpisodeNumbers
+                episode.number in downloadedEpisodeNumbers
 
             val checkBox =
                 CheckBox(this).apply {
@@ -759,8 +758,7 @@ class MainActivity : AppCompatActivity() {
             in episodes
         ) {
             if (
-                episode.number
-                in byNumber
+                episode.number in byNumber
             ) {
                 episode.url =
                     byNumber[
@@ -1103,12 +1101,9 @@ class MainActivity : AppCompatActivity() {
         val queue =
             episodes
                 .filter {
-                    it.number
-                        in selectedEpisodeNumbers &&
-                        it.url
-                            .isNotBlank() &&
-                        it.number
-                            !in downloadedEpisodeNumbers
+                    it.number in selectedEpisodeNumbers &&
+                        it.url.isNotBlank() &&
+                        it.number !in downloadedEpisodeNumbers
                 }
                 .sortedBy {
                     it.number
@@ -1672,8 +1667,7 @@ class MainActivity : AppCompatActivity() {
             )
 
         var value =
-            bytes.toDouble()
-                / 1024.0
+            bytes.toDouble() / 1024.0
 
         var unitIndex =
             0
