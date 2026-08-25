@@ -1,0 +1,13 @@
+W repozytorium powinny znaleźć się m.in.:
+
+.github/workflows/build-apk.yml
+app/
+build.gradle.kts
+settings.gradle.kts
+gradle.properties
+README_START_HERE.txt
+README_GITHUB_BUILD.md
+.gitignore
+
+Nie wrzucaj samego ZIP-a jako jedynego pliku.
+GitHub Actions musi widzieć rozpakowaną strukturę projektu.
