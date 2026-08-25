@@ -73,12 +73,51 @@
                 android:text="Odśwież" />
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/catalogStatusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="Katalog TVP: nie skonfigurowano"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/seriesUrlEdit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:hint="Główny adres serialu TVP"
+            android:inputType="textUri"
+            android:maxLines="2" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/saveSeriesButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Zapisz serial" />
+
+            <Button
+                android:id="@+id/refreshCatalogButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="Odśwież katalog" />
+        </LinearLayout>
+
         <Button
             android:id="@+id/editLinksButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Ustaw / edytuj linki odcinków" />
+            android:layout_marginTop="6dp"
+            android:text="Tryb ręczny — edytuj linki" />
 
         <View
             android:layout_width="match_parent"
@@ -185,7 +224,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
             android:paddingBottom="20dp"
-            android:text="Wersja 0.3.0: pobieranie działa jako usługa w tle z powiadomieniem. Kolejka jest zapisywana i może przetrwać zamknięcie ekranu aplikacji. TVP używa zwykłej ścieżki Polski zamiast audiodeskrypcji."
+            android:text="Wersja 0.4.0: automatyczny katalog TVP z głównego adresu serialu, miniaturami i automatycznymi linkami odcinków. Pobieranie działa w tle i zapisuje pliki na USB."
             android:textSize="13sp" />
 
     </LinearLayout>

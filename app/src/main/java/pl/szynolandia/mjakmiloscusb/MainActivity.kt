@@ -15,6 +15,7 @@ import android.view.Gravity
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -25,6 +26,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
+import coil.load
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDL.UpdateChannel
@@ -33,13 +35,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
     data class Episode(
         val number: Int,
-        var url: String
+        var url: String,
+        var title: String = "",
+        var thumbnailUrl: String = ""
     )
 
     private lateinit var titleText: TextView
@@ -56,6 +62,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var currentDownloadText: TextView
     private lateinit var currentProgressBar: ProgressBar
     private lateinit var queueProgressText: TextView
+    private lateinit var catalogStatusText: TextView
+    private lateinit var seriesUrlEdit: EditText
+    private lateinit var refreshCatalogButton: Button
 
     private val prefs by lazy {
         getSharedPreferences(
@@ -222,10 +231,14 @@ class MainActivity : AppCompatActivity() {
 
         requestNotificationPermissionIfNeeded()
 
-        loadEpisodes()
+        loadCatalogCacheOrAssets()
+        seriesUrlEdit.setText(
+            prefs.getString(KEY_SERIES_URL, DEFAULT_SERIES_URL) ?: DEFAULT_SERIES_URL
+        )
         refreshUsb()
         initDownloader()
         restoreDownloadState()
+        refreshCatalogFromTvp(false)
     }
 
     override fun onStart() {
@@ -329,6 +342,10 @@ class MainActivity : AppCompatActivity() {
             findViewById(
                 R.id.queueProgressText
             )
+
+        catalogStatusText = findViewById(R.id.catalogStatusText)
+        seriesUrlEdit = findViewById(R.id.seriesUrlEdit)
+        refreshCatalogButton = findViewById(R.id.refreshCatalogButton)
     }
 
     private fun bindButtons() {
@@ -345,6 +362,14 @@ class MainActivity : AppCompatActivity() {
             R.id.refreshButton
         ).setOnClickListener {
             refreshUsb()
+        }
+
+        findViewById<Button>(R.id.saveSeriesButton).setOnClickListener {
+            saveSeriesUrlAndRefresh()
+        }
+
+        refreshCatalogButton.setOnClickListener {
+            refreshCatalogFromTvp(true)
         }
 
         findViewById<Button>(
@@ -462,174 +487,159 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadEpisodes() {
+    private fun loadCatalogCacheOrAssets() {
         episodes.clear()
-
-        val raw =
-            assets.open(
-                "episodes.json"
-            )
-                .bufferedReader()
-                .use {
-                    it.readText()
+        val cached = prefs.getString(KEY_CATALOG_JSON, null)
+        if (!cached.isNullOrBlank()) {
+            try {
+                val root = JSONObject(cached)
+                titleText.text = root.optString("series", "VOD")
+                val array = root.optJSONArray("episodes") ?: JSONArray()
+                for (i in 0 until array.length()) {
+                    val item = array.getJSONObject(i)
+                    val number = item.optInt("number", -1)
+                    if (number > 0) episodes += Episode(number, item.optString("url", ""), item.optString("title", ""), item.optString("thumbnail", ""))
                 }
-
-        val json =
-            JSONObject(raw)
-
-        titleText.text =
-            json.optString(
-                "series",
-                "VOD"
-            )
-
-        val array =
-            json.getJSONArray(
-                "episodes"
-            )
-
-        for (
-            i in 0
-            until array.length()
-        ) {
-            val item =
-                array.getJSONObject(i)
-
-            val number =
-                item.getInt(
-                    "number"
-                )
-
-            val assetUrl =
-                item.optString(
-                    "url",
-                    ""
-                )
-
-            val savedUrl =
-                prefs.getString(
-                    "episode_url_$number",
-                    null
-                )
-
-            episodes +=
-                Episode(
-                    number = number,
-                    url = savedUrl ?: assetUrl
-                )
+                if (episodes.isNotEmpty()) {
+                    rebuildEpisodesUi()
+                    catalogStatusText.text = "Katalog TVP: ${episodes.size} odc. • dane lokalne"
+                    return
+                }
+            } catch (_: Exception) {}
         }
-
+        val raw = assets.open("episodes.json").bufferedReader().use { it.readText() }
+        val json = JSONObject(raw)
+        titleText.text = json.optString("series", "VOD")
+        val array = json.getJSONArray("episodes")
+        for (i in 0 until array.length()) {
+            val item = array.getJSONObject(i)
+            val number = item.getInt("number")
+            val savedUrl = prefs.getString("episode_url_$number", null)
+            episodes += Episode(number, savedUrl ?: item.optString("url", ""), "Odcinek $number", "")
+        }
         rebuildEpisodesUi()
     }
 
-    private fun rebuildEpisodesUi() {
-        episodesContainer
-            .removeAllViews()
+    private fun saveSeriesUrlAndRefresh() {
+        val url = seriesUrlEdit.text.toString().trim()
+        if (parseSeriesId(url) == null) {
+            Toast.makeText(this, "Podaj główny adres serialu TVP.", Toast.LENGTH_LONG).show()
+            return
+        }
+        prefs.edit().putString(KEY_SERIES_URL, url).apply()
+        refreshCatalogFromTvp(true)
+    }
 
-        selectedEpisodeNumbers
-            .clear()
-
-        for (
-            episode
-            in episodes.sortedBy {
-                it.number
-            }
-        ) {
-            val row =
-                LinearLayout(this).apply {
-                    orientation =
-                        LinearLayout.HORIZONTAL
-
-                    gravity =
-                        Gravity.CENTER_VERTICAL
-
-                    setPadding(
-                        0,
-                        5,
-                        0,
-                        5
-                    )
-                }
-
-            val alreadyDownloaded =
-                episode.number in downloadedEpisodeNumbers
-
-            val checkBox =
-                CheckBox(this).apply {
-
-                    text =
-                        "Odcinek ${episode.number}"
-
-                    textSize =
-                        18f
-
-                    isEnabled =
-                        !alreadyDownloaded &&
-                            episode.url
-                                .isNotBlank()
-
-                    layoutParams =
-                        LinearLayout.LayoutParams(
-                            0,
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                            1f
-                        )
-
-                    setOnCheckedChangeListener {
-                            _,
-                            checked ->
-
-                        if (checked) {
-                            selectedEpisodeNumbers
-                                .add(
-                                    episode.number
-                                )
-                        } else {
-                            selectedEpisodeNumbers
-                                .remove(
-                                    episode.number
-                                )
-                        }
-
-                        updateEpisodeSelectionSummary()
+    private fun refreshCatalogFromTvp(showToast: Boolean) {
+        val seriesUrl = seriesUrlEdit.text.toString().trim().ifBlank { DEFAULT_SERIES_URL }
+        val seriesId = parseSeriesId(seriesUrl) ?: return
+        catalogStatusText.text = "Katalog TVP: aktualizowanie..."
+        refreshCatalogButton.isEnabled = false
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val metadata = getJsonObject("$TVP_API_BASE/vods/serials/$seriesId?lang=pl&platform=BROWSER")
+                val seasons = getJsonArray("$TVP_API_BASE/vods/serials/$seriesId/seasons?lang=pl&platform=BROWSER")
+                val found = mutableMapOf<Int, Episode>()
+                for (i in 0 until seasons.length()) {
+                    val seasonId = seasons.getJSONObject(i).optString("id", "")
+                    if (seasonId.isBlank()) continue
+                    val arr = getJsonArray("$TVP_API_BASE/vods/serials/$seriesId/seasons/$seasonId/episodes?lang=pl&platform=BROWSER")
+                    for (j in 0 until arr.length()) {
+                        val item = arr.getJSONObject(j)
+                        val number = item.optInt("number", -1)
+                        val webUrl = item.optString("webUrl", "")
+                        if (number <= 0 || webUrl.isBlank()) continue
+                        found[number] = Episode(number, webUrl, item.optString("title", "Odcinek $number"), findFirstImageUrl(item.opt("images")))
                     }
                 }
-
-            val status =
-                TextView(this).apply {
-
-                    textSize =
-                        14f
-
-                    text =
-                        when {
-                            alreadyDownloaded ->
-                                "Pobrany ✓"
-
-                            episode.url.isBlank() ->
-                                "Brak linku"
-
-                            else ->
-                                "Do pobrania"
-                        }
+                val sorted = found.values.sortedByDescending { it.number }
+                if (sorted.isEmpty()) error("TVP nie zwróciło odcinków")
+                val seriesTitle = metadata.optString("title", "VOD")
+                saveCatalog(seriesTitle, sorted)
+                withContext(Dispatchers.Main) {
+                    episodes.clear(); episodes.addAll(sorted); titleText.text = seriesTitle
+                    prefs.edit().putString(KEY_SERIES_URL, seriesUrl).apply()
+                    refreshUsb()
+                    catalogStatusText.text = "Katalog TVP: ${sorted.size} odc. • zaktualizowano"
+                    refreshCatalogButton.isEnabled = true
+                    if (showToast) Toast.makeText(this@MainActivity, "Katalog zaktualizowany: ${sorted.size} odcinków.", Toast.LENGTH_SHORT).show()
                 }
-
-            row.addView(
-                checkBox
-            )
-
-            row.addView(
-                status
-            )
-
-            episodesContainer
-                .addView(
-                    row
-                )
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    catalogStatusText.text = "Katalog TVP: błąd • ${e.message?.take(100) ?: "nieznany"}"
+                    refreshCatalogButton.isEnabled = true
+                    if (showToast) Toast.makeText(this@MainActivity, "Nie udało się odświeżyć katalogu.", Toast.LENGTH_LONG).show()
+                }
+            }
         }
+    }
 
+    private fun parseSeriesId(url: String): String? = Regex("""-odcinki,(\d+)""").find(url)?.groupValues?.getOrNull(1)
+    private fun getJsonObject(url: String) = JSONObject(httpGet(url))
+    private fun getJsonArray(url: String) = JSONArray(httpGet(url))
+
+    private fun httpGet(urlText: String): String {
+        val c = URL(urlText).openConnection() as HttpURLConnection
+        try {
+            c.requestMethod = "GET"; c.connectTimeout = 15000; c.readTimeout = 30000
+            c.setRequestProperty("Accept", "application/json")
+            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Android) VOD-USB/0.4.0")
+            val code = c.responseCode
+            val body = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (code !in 200..299) error("HTTP $code")
+            return body
+        } finally { c.disconnect() }
+    }
+
+    private fun findFirstImageUrl(node: Any?): String {
+        when (node) {
+            is JSONObject -> {
+                val direct = node.optString("url", "")
+                if (direct.startsWith("http")) return direct
+                val keys = node.keys()
+                while (keys.hasNext()) {
+                    val result = findFirstImageUrl(node.opt(keys.next()))
+                    if (result.isNotBlank()) return result
+                }
+            }
+            is JSONArray -> for (i in 0 until node.length()) {
+                val result = findFirstImageUrl(node.opt(i)); if (result.isNotBlank()) return result
+            }
+        }
+        return ""
+    }
+
+    private fun saveCatalog(seriesTitle: String, list: List<Episode>) {
+        val root = JSONObject().put("series", seriesTitle)
+        val array = JSONArray()
+        list.forEach { e -> array.put(JSONObject().put("number", e.number).put("url", e.url).put("title", e.title).put("thumbnail", e.thumbnailUrl)) }
+        root.put("episodes", array)
+        prefs.edit().putString(KEY_CATALOG_JSON, root.toString()).apply()
+    }
+
+    private fun rebuildEpisodesUi() {
+        episodesContainer.removeAllViews()
+        selectedEpisodeNumbers.clear()
+        for (episode in episodes.sortedByDescending { it.number }) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 8, 0, 8) }
+            val image = ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(112), dp(64)); scaleType = ImageView.ScaleType.CENTER_CROP
+                if (episode.thumbnailUrl.isNotBlank()) load(episode.thumbnailUrl) { crossfade(true) }
+            }
+            val alreadyDownloaded = episode.number in downloadedEpisodeNumbers
+            val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f); setPadding(dp(10),0,0,0) }
+            val check = CheckBox(this).apply {
+                text = "Odcinek ${episode.number}"; textSize = 17f; isEnabled = !alreadyDownloaded && episode.url.isNotBlank()
+                setOnCheckedChangeListener { _, checked -> if (checked) selectedEpisodeNumbers.add(episode.number) else selectedEpisodeNumbers.remove(episode.number); updateEpisodeSelectionSummary() }
+            }
+            val subtitle = TextView(this).apply { text = episode.title.ifBlank { "Odcinek ${episode.number}" }; textSize = 13f; maxLines = 2 }
+            val status = TextView(this).apply { textSize = 13f; text = when { alreadyDownloaded -> "Pobrany ✓"; episode.url.isBlank() -> "Brak linku"; else -> "Do pobrania" } }
+            column.addView(check); column.addView(subtitle); column.addView(status); row.addView(image); row.addView(column); episodesContainer.addView(row)
+        }
         updateEpisodeSelectionSummary()
     }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun updateEpisodeSelectionSummary() {
 
@@ -774,6 +784,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        saveCatalog(titleText.text.toString(), episodes)
         rebuildEpisodesUi()
 
         Toast.makeText(
@@ -1697,6 +1708,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+
+        private const val KEY_SERIES_URL = "series_url"
+        private const val KEY_CATALOG_JSON = "catalog_json"
+        private const val DEFAULT_SERIES_URL = "https://vod.tvp.pl/seriale,18/m-jak-milosc-odcinki,274703"
+        private const val TVP_API_BASE = "https://vod.tvp.pl/api/products"
 
         private const val ESTIMATED_EPISODE_BYTES =
             1_600_000_000L
