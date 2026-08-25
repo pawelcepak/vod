@@ -61,6 +61,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: VOD-USB-APK-${{ github.ref_name }}
+          name: VOD-USB-APK-${{ github.run_number }}
           path: output/VOD-USB-0.4.2.apk
           if-no-files-found: error
