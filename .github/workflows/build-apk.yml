@@ -1,5 +1,8 @@
 name: Build Android APK
 
+permissions:
+  contents: write
+
 on:
   push:
     branches:
@@ -56,11 +59,26 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p output
-          cp app/build/outputs/apk/release/app-release.apk output/VOD-USB-0.5.0.apk
+          cp app/build/outputs/apk/release/app-release.apk output/VOD-USB.apk
+          cp app/build/outputs/apk/release/app-release.apk output/VOD-USB-build-${{ github.run_number }}.apk
+
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: VOD-USB-APK-${{ github.run_number }}
-          path: output/VOD-USB-0.5.0.apk
+          path: output/*.apk
           if-no-files-found: error
+
+      - name: Publish stable APK link
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest output/VOD-USB.apk --clobber
+          else
+            gh release create latest output/VOD-USB.apk \
+              --title "VOD USB — najnowsza wersja" \
+              --notes "Stały punkt pobierania aktualnej wersji aplikacji VOD USB."
+          fi
