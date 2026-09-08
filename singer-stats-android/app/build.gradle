@@ -1,0 +1,17 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'pl.szynolandia.singerstats'
+    compileSdk 36
+    defaultConfig {
+        applicationId "pl.szynolandia.singerstats"
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName "1.0.0"
+    }
+}
+
+dependencies {
+    implementation 'dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.7'
+}
